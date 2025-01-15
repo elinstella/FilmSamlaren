@@ -18,7 +18,7 @@ Navigera sedan till mappen: bash
 Kopiera kod:  cd FilmSamlaren
 
 Öppna i webbläsaren
-Gå in på mappen html och vänsterklicka på dinafavoriter.html, och öppna i live server.
+Gå in på mappen html och vänsterklicka på filmsalmaren.html, och öppna i live server.
 
 
 Information: 
