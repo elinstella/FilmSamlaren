@@ -4,11 +4,81 @@ let currentPage = 1;
 let searchText = '';
 let selectedGenre = '';
 
+// Hämta api för att söka filmer baserat på söktext, genre och sida
+async function searchMovies(page = 1) {
+    try {
+        searchText = document.getElementById('search-text').value.trim();
+        selectedGenre = document.getElementById('genre-select').value;
+
+        // Bygg API-anropet baserat på om användaren söker på en text
+        let query = '';
+        if (searchText) {
+            query = `${baseUrl}/search/movie?api_key=${apiKey}&page=${page}&query=${encodeURIComponent(searchText)}&language=sv-SE`;
+        } else {
+            query = `${baseUrl}/discover/movie?api_key=${apiKey}&page=${page}&language=sv-SE`;
+        }
+
+        // Await fetch för att skicka API-anropet och hämta svaret
+        const response = await fetch(query);
+
+        if (!response.ok) {
+            throw new Error('Något gick fel med API-anropet');
+        }
+
+        // Hämta och hantera data från API-svaret
+        const data = await response.json();
+        let filteredMovies = data.results;
+
+        if (selectedGenre) {
+            filteredMovies = filteredMovies.filter(movie => movie.genre_ids.includes(parseInt(selectedGenre)));
+        }
+
+        // Visa endast de 10 första filtrerade filmerna
+        const moviesToShow = filteredMovies.slice(0, 10);
+        if (moviesToShow.length === 0) {
+            // Visa felmeddelande om inga filmer hittades
+            showErrorMessage("Inga filmer hittades med den valda sökningen eller genre.");
+        } else {
+            // Dölj felmeddelande och visa filmer
+            hideErrorMessage();
+            displayMovies(moviesToShow);
+            managePagination(data.page, data.total_pages);
+
+            // Visa antal filmer som hittades
+            const movieCount = document.getElementById('movie-count');
+            if (selectedGenre) {
+                movieCount.innerText = `Totalt antal filmer hittade: ${filteredMovies.length}`;
+            } else {
+                movieCount.innerText = `Totalt antal filmer hittade: ${data.total_results}`;
+            }
+        }
+    } catch (error) {
+        // Hantera eventuella fel som uppstår
+        console.error('Error searching movies:', error);
+        showErrorMessage("Något gick fel när filmerna hämtades. Försök igen senare.");
+    }
+}
+
+// Visa ett felmeddelande
+function showErrorMessage(message) {
+    const errorMessageElement = document.getElementById('error-message');
+    errorMessageElement.innerText = message;
+    errorMessageElement.style.display = 'block';
+}
+
+// Dölja ett felmeddelande
+function hideErrorMessage() {
+    const errorMessageElement = document.getElementById('error-message');
+    errorMessageElement.style.display = 'none';
+}
+
+// Hämta genrer från API och fylla i dropdown-listan
 async function fetchGenres() {
     try {
         const response = await fetch(`${baseUrl}/genre/movie/list?api_key=${apiKey}&language=sv-SE`);
         const data = await response.json();
         const genreSelect = document.getElementById('genre-select');
+        // Lägg till varje genre som ett alternativ i dropdown-listan
         data.genres.forEach(genre => {
             const option = document.createElement('option');
             option.value = genre.id;
@@ -20,69 +90,15 @@ async function fetchGenres() {
     }
 }
 
-async function searchMovies(page = 1) {
-    try {
-        searchText = document.getElementById('search-text').value.trim();
-        selectedGenre = document.getElementById('genre-select').value;
-
-        let query = '';
-        if (searchText) {
-            query = `${baseUrl}/search/movie?api_key=${apiKey}&page=${page}&query=${encodeURIComponent(searchText)}&language=sv-SE`;
-        } else {
-            query = `${baseUrl}/discover/movie?api_key=${apiKey}&page=${page}&language=sv-SE`;
-        }
-
-        const response = await fetch(query);
-        
-        if (!response.ok) {
-            throw new Error('Något gick fel med API-anropet');
-        }
-
-        const data = await response.json();
-        let filteredMovies = data.results;
-
-        if (selectedGenre) {
-            filteredMovies = filteredMovies.filter(movie => movie.genre_ids.includes(parseInt(selectedGenre)));
-        }
-
-        const moviesToShow = filteredMovies.slice(0, 10); 
-        if (moviesToShow.length === 0) {
-            showErrorMessage("Inga filmer hittades med den valda sökningen eller genre.");
-        } else {
-            hideErrorMessage();
-            displayMovies(moviesToShow);
-            managePagination(data.page, data.total_pages);
-
-            const movieCount = document.getElementById('movie-count');
-            if (selectedGenre) {
-                movieCount.innerText = `Totalt antal filmer hittade: ${filteredMovies.length}`;
-            } else {
-                movieCount.innerText = `Totalt antal filmer hittade: ${data.total_results}`;
-            }
-        }
-    } catch (error) {
-        console.error('Error searching movies:', error);
-        showErrorMessage("Något gick fel när filmerna hämtades. Försök igen senare.");
-    }
-}
-
-function showErrorMessage(message) {
-    const errorMessageElement = document.getElementById('error-message');
-    errorMessageElement.innerText = message;
-    errorMessageElement.style.display = 'block'; 
-}
-
-function hideErrorMessage() {
-    const errorMessageElement = document.getElementById('error-message');
-    errorMessageElement.style.display = 'none'; 
-}
-
+// Funktion för att visa filmer 
 function displayMovies(movies) {
     const movieContainer = document.getElementById('movie-container');
-    movieContainer.innerHTML = '';
+    movieContainer.innerHTML = ''; // Rensa tidigare filmer
 
+    // Hämta favoritfilmer från localStorage
     const favorites = JSON.parse(localStorage.getItem('favorites')) || [];
 
+    // För att filmer ska visas
     movies.forEach(movie => {
         const isFavorite = favorites.some(fav => fav.id === movie.id);
 
@@ -96,18 +112,17 @@ function displayMovies(movies) {
             </button>
         `;
 
-        // Klickhändelse för att visa popup
+        // Lägg till klickhändelse för att visa filmens detaljer i en popup
         movieElement.addEventListener('click', (event) => {
-            // Om klicket inte är på favoritknappen, visa popup
             if (!event.target.classList.contains('favorite-btn')) {
                 showMoviePopup(movie.id);
             }
         });
 
-        // Klickhändelse för favoritknapp
+        // Lägg till klickhändelse för att hantera favoritknapp
         const favoriteBtn = movieElement.querySelector('.favorite-btn');
         favoriteBtn.addEventListener('click', (event) => {
-            event.stopPropagation(); // Förhindra att popup visas när man klickar på favoritknappen
+            event.stopPropagation();
             toggleFavorite(movie, favoriteBtn);
         });
 
@@ -115,6 +130,7 @@ function displayMovies(movies) {
     });
 }
 
+// Funktion för att visa detaljer om en film i en popup
 async function showMoviePopup(movieId) {
     try {
         const response = await fetch(`${baseUrl}/movie/${movieId}?api_key=${apiKey}&language=sv-SE`);
@@ -142,6 +158,7 @@ async function showMoviePopup(movieId) {
     }
 }
 
+// Funktion för att hantera favoritfunktionalitet
 function toggleFavorite(movie, button) {
     const favorites = JSON.parse(localStorage.getItem('favorites')) || [];
     const movieIndex = favorites.findIndex(fav => fav.id === movie.id);
@@ -159,6 +176,7 @@ function toggleFavorite(movie, button) {
     localStorage.setItem('favorites', JSON.stringify(favorites));
 }
 
+// Funktion för att hantera paginering 
 function managePagination(current, total) {
     const prevButton = document.getElementById('prev');
     const nextButton = document.getElementById('next');
@@ -167,11 +185,13 @@ function managePagination(current, total) {
     nextButton.disabled = current === total;
 }
 
+// Funktion för att ändra sida och uppdatera visningen
 function changePage(direction) {
     currentPage += direction;
     searchMovies(currentPage);
 }
 
+// Händelsehantering för sökfält och genreval
 document.getElementById('search-text').addEventListener('input', function() {
     currentPage = 1;
     searchMovies(currentPage);
@@ -182,10 +202,14 @@ document.getElementById('genre-select').addEventListener('change', function() {
     searchMovies(currentPage);
 });
 
+// Element för att visa antalet filmer
 const movieCountElement = document.createElement('p');
 movieCountElement.id = 'movie-count';
 document.body.insertBefore(movieCountElement, document.getElementById('movie-container'));
 
-fetchGenres();
-searchMovies(currentPage);
-
+// Hämta genrer och starta en första sökning parallellt
+Promise.all([fetchGenres(), searchMovies(currentPage)])
+    .catch(error => {
+        console.error('Error initializing the app:', error);
+        showErrorMessage("Ett fel uppstod vid start. Försök igen senare.");
+    });
